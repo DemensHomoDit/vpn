@@ -1,5 +1,3 @@
-from .manual import ManualProvider
-
 PLANS = {
     "month": {"name": "1 месяц", "days": 30, "price": 299},
     "3months": {"name": "3 месяца", "days": 90, "price": 799},
@@ -26,5 +24,6 @@ class PaymentProvider:
 
 
 def get_provider(name: str) -> PaymentProvider:
+    from .manual import ManualProvider
     providers = {"manual": ManualProvider()}
     return providers.get(name, ManualProvider())
