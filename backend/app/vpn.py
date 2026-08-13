@@ -12,7 +12,10 @@ def _load_meta() -> dict:
 
 
 def _run(cmd: list[str]) -> str:
-    return subprocess.check_output(cmd, text=True).strip()
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT).strip()
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"{cmd[0]} failed ({e.returncode}): {e.output}") from e
 
 
 def new_uuid() -> str:
