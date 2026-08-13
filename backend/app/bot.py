@@ -174,10 +174,28 @@ async def cb_cfg(callback: CallbackQuery):
     b.button(text="QR-код (Android/iOS)", callback_data="cfg:qr")
     b.button(text="Файл конфига (Windows)", callback_data="cfg:file")
     b.button(text="Ссылка vless://", callback_data="cfg:uri")
+    b.button(text="Текст конфига", callback_data="cfg:text")
     b.button(text="Перегенерировать", callback_data="cfg:regen")
     b.button(text="Назад", callback_data="lk")
     b.adjust(1)
     await callback.message.edit_text("Ваш конфиг готов. Выберите способ установки:", reply_markup=b.as_markup())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cfg:text")
+async def cb_cfg_text(callback: CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+    config_json, _ = ensure_config(user)
+    if len(config_json) > 3500:
+        await callback.message.answer_document(
+            BufferedInputFile(config_json.encode(), filename=f"config-{user['tg_id']}.json"),
+            caption="Файл слишком большой для текста — скачайте и откройте в приложении.",
+        )
+    else:
+        await callback.message.answer(
+            "Скопируйте текст целиком, затем в приложении: «+» → Import from clipboard / Из буфера обмена.\n\n"
+            f"<code>{config_json}</code>"
+        )
     await callback.answer()
 
 
