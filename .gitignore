@@ -11,3 +11,5 @@ backend/webapp/dist/
 *.pem
 private/
 data/
+.ssh_*.py
+.probe_*.sh

@@ -1,20 +1,26 @@
 # Деплой на VPS
 
-Один сервер (Ubuntu 22.04+) несёт всё: sing-box, FastAPI, бота, webapp.
+Один сервер (Ubuntu 22.04+) несёт всё: Marzban (Xray, VLESS Reality),
+FastAPI-бэкенд, Telegram-бота и Mini App.
 
-## 1. Загрузка и установка
+Порты: 443/TCP — VLESS Reality; 8000/TCP — HTTP-панель и подписки
+Marzban; API бэкенда слушает 127.0.0.1:8081 и наружу отдаётся только
+через HTTPS-туннель.
+
+## 1. Marzban
 
 ```bash
-apt-get update && apt-get install -y git
 git clone <ваш-репо> /root/vpn
-cd /root/vpn
-
-sudo bash server/install.sh            # sing-box + firewall (443/tcp)
-sudo python3 server/gen-server-conf.py init
-sudo systemctl enable --now sing-box
-
-# проверить: публичный ключ и short_id в /etc/sing-box/meta.json
+sudo bash /root/vpn/server/install.sh vpnadmin 'пароль'
 ```
+
+Скрипт ставит Docker, поднимает контейнер Marzban, создаёт sudo-админа,
+сохраняет X25519-ключи в `/root/marzban-x25519.txt`.
+
+Приведите инбаунд к целевому виду (см. вывод скрипта): порт 443,
+Reality с `dest`/`sni` = `dl.google.com:443`, fingerprint `chrome`,
+flow `xtls-rprx-vision`, tag `VLESS-REALITY`, один shortId из ключей.
+Затем `docker compose restart` в `/opt/marzban`.
 
 ## 2. Бэкенд и бот
 
@@ -22,13 +28,14 @@ sudo systemctl enable --now sing-box
 cd /root/vpn/backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cp .env.example .env
-nano .env
+cp .env.example .env && nano .env
 ```
 
 `.env`: BOT_TOKEN (от @BotFather), ADMIN_IDS (ваш tg_id), JWT_SECRET
-(случайная строка), VPS_IP (IP сервера), USERS_SCRIPT/GEN_SCRIPT
-(пути `/root/vpn/server/...`).
+(случайная строка), MARZBAN_USERNAME/MARZBAN_PASSWORD — админ из шага 1,
+VPS_IP, REALITY_PBK/REALITY_SID — из `/root/marzban-x25519.txt` и
+xray_config.json, MARZBAN_PUBLIC_URL = `http://<IP>:8000`
+(адрес подписок для клиентов), WEBAPP_URL — HTTPS-адрес Mini App (шаг 4).
 
 systemd-юниты:
 
@@ -41,7 +48,7 @@ After=network.target
 [Service]
 WorkingDirectory=/root/vpn/backend
 EnvironmentFile=/root/vpn/backend/.env
-ExecStart=/root/vpn/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+ExecStart=/root/vpn/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8081
 Restart=on-failure
 
 [Install]
@@ -69,71 +76,74 @@ systemctl daemon-reload
 systemctl enable --now vpn-api vpn-bot
 ```
 
-Бот ходит в `users.sh` через sudo — при запуске от root работает
-напрямую. Если хотите непривилегированного пользователя:
-
-```bash
-echo "vpn ALL=(root) NOPASSWD: /root/vpn/server/users.sh" > /etc/sudoers.d/vpn
-```
+Бот и API работают с Marzban через локальный REST (`MARZBAN_URL`),
+дополнительных sudo-скриптов не нужно.
 
 ## 3. Проверка
 
-1. Напишите боту `/start` — создастся пользователь.
-2. «Купить подписку» → появится заявка → админ подтверждает кнопкой →
-   пользователь получает дни.
-3. «Мой конфиг» → QR / файл. Импортируйте в sing-box на телефоне,
-   включите — западные сайты через VPN, российские напрямую.
+1. Напишите боту `/start`.
+2. «⚡ Подключить» → QR / ссылка vless:// / подписочная ссылка.
+   Импортируйте в v2rayNG (Android) или Streisand (iPhone), включите VPN:
+   зарубежные сайты через VPN, российские напрямую.
+3. «Купить подписку» → заявка → админ подтверждает → дни продлеваются
+   в Marzban автоматически.
 
-## 4. Mini App
+## 4. Mini App (HTTPS)
 
-WebApp уже собран в `backend/webapp/dist` (пересборка: `cd webapp && npm i && npm run build`).
-FastAPI отдаёт его на `/` и `/webapp`.
+WebApp собран в `backend/webapp/dist` (пересборка: `cd webapp && npm ci && npm run build`).
+FastAPI отдаёт его на `/` и `/webapp`. Порт 8081 закрыт файрволом;
+снаружи — только HTTPS-туннель.
 
-HTTPS нужен обязательно. Без домена — временно:
+Без домена (временный адрес меняется при перезапуске туннеля):
 
-```bash
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
-chmod +x /usr/local/bin/cloudflared
-cloudflared tunnel --url http://localhost:8000
+```ini
+# /etc/systemd/system/vpn-tunnel.service
+[Service]
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8081
+Restart=always
+RestartSec=5
 ```
 
-Появится URL вида `https://xxxx.trycloudflare.com`. С доменом
-(~$3/год) — Caddy: `caddy reverse-proxy --from vpn.example.com --to :8000`.
+```bash
+systemctl restart vpn-tunnel
+journalctl -u vpn-tunnel | grep trycloudflare   # новый URL → WEBAPP_URL в .env
+systemctl restart vpn-bot
+```
 
-Затем в @BotFather: Bot Settings → Menu Button → URL webapp.
-`WEBAPP_URL` в `.env` → кнопка «Открыть Mini App» в боте.
+С доменом (~$3/год) — Caddy: `caddy reverse-proxy --from vpn.example.com --to :8081`,
+тогда WEBAPP_URL постоянный, а домен же можно указать как
+XRAY_SUBSCRIPTION_URL_PREFIX в Marzban для красивых ссылок подписок.
+
+В @BotFather: Bot Settings → Menu Button → URL webapp.
 
 ## 5. Автоматическое обновление из Git
 
-После первого запуска бэкенда установите таймер. `backend/.env` должен
-оставаться только на сервере и не добавляться в репозиторий.
-
 ```bash
 cd /root/vpn
-sudo install -m 755 server/update.sh /root/vpn/server/update.sh
-sudo install -m 644 server/vpn-update.service /etc/systemd/system/vpn-update.service
-sudo install -m 644 server/vpn-update.timer /etc/systemd/system/vpn-update.timer
+sudo install -m 755 server/update.sh server/update.sh
+sudo install -m 644 server/vpn-update.service /etc/systemd/system/
+sudo install -m 644 server/vpn-update.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now vpn-update.timer
-sudo systemctl start vpn-update.service
 ```
 
-Таймер проверяет обновления каждые шесть часов. Он откажется обновлять
-сервер, если в рабочей копии есть локальные изменения, поэтому секреты и
-настройки держите в `.env`.
+Таймер каждые 6 часов: `git pull --ff-only`, pip/npm-установка, сборка
+Mini App, рестарт сервисов. При локальных изменениях на сервере апдейт
+безопасно пропускается.
 
 ## 6. Эксплуатация
 
 - `/stats` — статистика (бот, админ)
-- `/extend <tg_id> <дней>` — продлить
-- `/revoke <tg_id>` — отозвать доступ
-- Просрочка отключается автоматически (loop в боте, раз в час)
-- Списки RU-правил у клиентов обновляются сами (rule sets, раз в сутки)
+- `/extend <tg_id> <дней>` — продлить (в БД и Marzban)
+- `/revoke <tg_id>` — отключить пользователя (status=disabled)
+- Просрочка: Marzban сам отключает пользователя по expire; бот сбрасывает
+  флаг в БД раз в час
+- Конфиги пользователей — «Перевыпустить» в меню или Mini App
 
-## Известные ограничения v1
+## Известные ограничения
 
 - Платежи: ручное подтверждение админом (провайдер подключается через
   `backend/app/payments/`).
-- IPv6 на клиенте не используется (`strategy: ipv4_only`).
-- UUID хранится в SQLite бэкенда — сервер-бэкап БД не помешает
-  (`data/vpn.db`).
+- Подписочные ссылки идут по HTTP (`http://IP:8000`) — пока нет домена.
+  Клиенты принимают http-подписки, но HTTPS лучше: решается доменом.
+- Ссылки пользователя привязаны к IP сервера — домен избавит и от этого.

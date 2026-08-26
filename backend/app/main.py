@@ -13,6 +13,19 @@ from .webapp_auth import create_token, decode_token, validate_init_data
 app = FastAPI(title="VPN backend")
 WEBAPP_DIST = Path(__file__).parent.parent / "webapp" / "dist"
 
+INSTRUCTIONS = (
+    "1. Установите приложение для подключения.\n"
+    "2. Во вкладке «Конфиг» отсканируйте QR или скопируйте ссылку vless://.\n"
+    "3. В приложении: «+» → Import from clipboard / Scan QR-code.\n"
+    "4. Включите VPN-режим.\n\n"
+    "Приложения:\n"
+    "Android: v2rayNG, NekoBox\n"
+    "iPhone: Streisand, FoXray\n"
+    "Windows/macOS: Hiddify, Nekoray, v2rayN\n\n"
+    "Российские сайты идут напрямую (ваш IP), остальные — через VPN.\n"
+    "Протокол VLESS + Reality имитирует обычный HTTPS-трафик к dl.google.com."
+)
+
 
 def _auth(request: Request) -> dict:
     auth = request.headers.get("Authorization", "")
@@ -59,13 +72,34 @@ async def me(request: Request):
     }
 
 
+_sub_cache: dict[int, str] = {}
+
+
+async def _ensure_cfg(user: dict) -> tuple[str, str | None]:
+    mb_name = vpn.marzban_username(user["tg_id"])
+    muser = await vpn.get_user(mb_name)
+    if not muser or not muser.get("proxies", {}).get("vless", {}).get("id"):
+        if muser:
+            await vpn.delete_user(mb_name)
+        days = max(1, ((user["expires_at"] or 0) - int(time.time())) // 86400 + 1)
+        muser = await vpn.create_user(mb_name, days)
+    uuid = muser["proxies"]["vless"]["id"]
+    uri = vpn.build_vless_uri(uuid, f"user{user['tg_id']}")
+    db.save_config(user["tg_id"], mb_name, uuid, uri)
+    sub = vpn.subscribe_url(muser.get("subscription_url"))
+    if sub:
+        _sub_cache[user["tg_id"]] = sub
+    return uri, sub
+
+
 @app.get("/api/config")
 async def get_config(request: Request):
     payload = _auth(request)
     user = db.get_user(payload["tg_id"])
-    if not user or not user["config_json"]:
-        raise HTTPException(404, "no config")
-    return {"config_json": user["config_json"], "config_uri": user["config_uri"]}
+    if not user:
+        raise HTTPException(404, "user not found")
+    uri, sub = await _ensure_cfg(user)
+    return {"config_uri": uri, "config_json": "", "subscribe_url": sub}
 
 
 @app.post("/api/config/regenerate")
@@ -74,13 +108,9 @@ async def regenerate_config(request: Request):
     user = db.get_user(payload["tg_id"])
     if not user:
         raise HTTPException(404, "user not found")
-    if user["uuid"]:
-        vpn.del_user(user["uuid"])
-    uuid = vpn.new_uuid()
-    config_json, config_uri = vpn.build_client(uuid, f"user{payload['tg_id']}")
-    vpn.add_user(uuid)
-    db.save_config(payload["tg_id"], uuid, config_json, config_uri)
-    return {"config_json": config_json, "config_uri": config_uri}
+    await vpn.delete_user(vpn.marzban_username(payload["tg_id"]))
+    uri, sub = await _ensure_cfg(user)
+    return {"config_uri": uri, "config_json": "", "subscribe_url": sub}
 
 
 @app.post("/api/pay")
@@ -121,7 +151,20 @@ async def admin_payments(request: Request):
 async def admin_pay(request: Request, body: dict):
     payload = _auth(request)
     _admin(payload)
-    return _confirm_payment(body.get("payment_id"), bool(body.get("approve", True)))
+    approved = bool(body.get("approve", True))
+    payment = db.get_payment(body.get("payment_id"))
+    result = _confirm_payment(body.get("payment_id"), approved)
+    if approved and payment and payment["status"] == "pending":
+        urow = db.get_user_by_id(payment["user_id"])
+        if urow:
+            plan = PLANS.get(payment["plan"], {"days": 30})
+            db.extend_user(urow["tg_id"], plan["days"])
+            try:
+                await _ensure_cfg(db.get_user(urow["tg_id"]))
+                await vpn.renew_user(vpn.marzban_username(urow["tg_id"]), plan["days"])
+            except Exception:
+                pass
+    return result
 
 
 def _confirm_payment(payment_id, approve: bool):
@@ -139,19 +182,14 @@ async def admin_extend(request: Request, body: dict):
     ok = db.extend_user(body.get("tg_id"), int(body.get("days", 0)))
     if not ok:
         raise HTTPException(404, "user not found")
+    try:
+        tg_id = int(body["tg_id"])
+        days = int(body.get("days", 0))
+        await _ensure_cfg(db.get_user(tg_id))
+        await vpn.renew_user(vpn.marzban_username(tg_id), days)
+    except Exception:
+        pass
     return {"ok": True}
-
-
-INSTRUCTIONS = (
-    "1. Скачайте приложение sing-box на своё устройство.\n"
-    "2. Откройте профиль из личного кабинета (файл или QR-код).\n"
-    "3. Включите VPN-режим в приложении.\n\n"
-    "Windows: sing-box GUI / Nekoray / v2rayN (sing-box core)\n"
-    "Android: sing-box (SFA) или NekoBox\n"
-    "iOS: sing-box (SFI) или Streisand\n\n"
-    "Российские сайты работают напрямую, остальные — через VPN. "
-    "Подключение автоматически обновляет списки правил раз в сутки."
-)
 
 
 @app.get("/")

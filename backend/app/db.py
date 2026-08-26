@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT,
   created_at INTEGER,
   expires_at INTEGER,
+  marzban_username TEXT DEFAULT '',
   uuid TEXT,
-  config_json TEXT,
   config_uri TEXT,
   server_active INTEGER DEFAULT 0
 );
@@ -30,6 +30,16 @@ CREATE TABLE IF NOT EXISTS payments (
 """
 
 
+def _migrate(conn):
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if not cols:
+        return  # только что создана по схеме
+    if "marzban_username" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN marzban_username TEXT DEFAULT ''")
+        # одноразовая миграция с эпохи sing-box: старые конфиги недействительны
+        conn.execute("UPDATE users SET uuid = NULL, config_uri = NULL, server_active = 0")
+
+
 def _connect():
     Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(settings.db_path)
@@ -40,6 +50,7 @@ def _connect():
 def init_db():
     with _connect() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
 
 
 def get_or_create_user(tg_id: int, name: str, username: str | None) -> dict:
@@ -69,10 +80,11 @@ def get_user_by_id(user_id: int) -> dict | None:
         return dict(row) if row else None
 
 
-def save_config(tg_id: int, uuid: str, config_json: str, config_uri: str):
+def save_config(tg_id: int, marzban_username: str, uuid: str, config_uri: str):
     with _connect() as conn:
-        conn.execute("UPDATE users SET uuid = ?, config_json = ?, config_uri = ?, server_active = 1 WHERE tg_id = ?",
-                     (uuid, config_json, config_uri, tg_id))
+        conn.execute(
+            "UPDATE users SET marzban_username = ?, uuid = ?, config_uri = ?, server_active = 1 WHERE tg_id = ?",
+            (marzban_username, uuid, config_uri, tg_id))
         conn.commit()
 
 

@@ -85,48 +85,51 @@ function Home({ me, go }: { me: any; go: (v: View) => void }) {
 function Config({ me }: { me: any }) {
   const [cfg, setCfg] = useState<any>(null);
   const [qr, setQr] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState("");
+  const [err, setErr] = useState("");
 
   const load = useCallback(() => {
     api.getConfig().then((c) => {
       setCfg(c);
       QRCode.toDataURL(c.config_uri, { width: 240, margin: 1 }).then(setQr);
-    }).catch((e) => setError2(String(e)));
+    }).catch((e) => setErr(String(e)));
   }, []);
-  const setError2 = (s: string) => {};
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const copyUri = () => {
-    navigator.clipboard.writeText(cfg.config_uri);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  const download = () => {
-    const blob = new Blob([cfg.config_json], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `config-${me.tg_id}.json`;
-    a.click();
+  const copy = (key: "uri" | "sub", text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(""), 1500);
   };
 
   const regen = () => {
-    if (!confirm("Перегенерировать конфиг? Старый перестанет работать.")) return;
+    if (!confirm("Перевыпустить конфиг? Старый перестанет работать.")) return;
     api.regenerate().then(() => load());
   };
 
+  if (err) return <p className="muted">Ошибка: {err}</p>;
   if (!cfg) return <p className="muted">Загрузка…</p>;
   return (
     <div className="stack">
       <div className="card center">
         {qr && <img src={qr} alt="QR" className="qr" />}
-        <button className="btn" onClick={copyUri}>{copied ? "Скопировано ✓" : "Скопировать vless://"}</button>
-        <button className="btn ghost" onClick={download}>Скачать файл .json</button>
-        <button className="btn ghost" onClick={regen}>Перегенерировать</button>
-        <p className="muted small">Android/iOS: QR в sing-box (SFA/SFI) или NekoBox/Streisand.<br />Windows: файл .json в sing-box GUI / Nekoray.</p>
+        <button className="btn" onClick={() => copy("uri", cfg.config_uri)}>
+          {copied === "uri" ? "Скопировано ✓" : "Скопировать vless://"}
+        </button>
+        {cfg.subscribe_url && (
+          <button className="btn ghost" onClick={() => copy("sub", cfg.subscribe_url)}>
+            {copied === "sub" ? "Скопировано ✓" : "Скопировать подписку"}
+          </button>
+        )}
+        <button className="btn ghost" onClick={regen}>Перевыпустить</button>
+        <p className="muted small">
+          Android (v2rayNG): Scan QR-code или Import from clipboard.<br />
+          iPhone (Streisand): «+» → Add config → Scan.<br />
+          Подписка: добавить ссылку в Subscriptions — конфиг обновляется сам.
+        </p>
       </div>
     </div>
   );

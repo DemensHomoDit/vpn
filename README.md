@@ -6,69 +6,61 @@
 
 ## Протокол
 
-**VLESS + Reality (sing-box)** — самый современный протокол для этого
-сценария: трафик маскируется под обычный HTTPS к реальному сайту
-(fallback), устойчив к DPI и активному зондированию, нет серверного
-сертификата и открытых признаков VPN.
+**VLESS + Reality (Xray через панель Marzban)** — трафик маскируется под
+обычный HTTPS к реальному сайту (`dl.google.com`), устойчив к DPI и
+активному зондированию, нет серверного сертификата и открытых признаков
+VPN.
 
-Маршрутизация — на клиенте, нативными правилами sing-box:
-- домены РФ (rule set `Russia-domains` + `geosite-ru` от itdoginfo/allow-domains)
-  и IP РФ (`Russia-ips`) → DIRECT (реальный IP пользователя);
-- всё остальное → VPS;
-- rule set'ы обновляются автоматически (раз в сутки), списки поддерживает
-  сообщество, ничего не нужно вести руками.
+Маршрутизация — на клиенте: домены и IP РФ идут напрямую (правила в
+клиентских приложениях), всё остальное — через VPS.
 
-Пользователи = UUID в Reality inbound; отзыв доступа = удаление UUID из
-`users.json` + reload.
+Пользователи = записи панели Marzban (REST API): регистрация, продление
+и отзыв доступа делаются бэкендом через API, лимиты и сроки считает
+Marzban.
 
 ## Структура
 
 ```
-server/     скрипты для VPS: установка sing-box, генерация ключей/конфига,
-            управление пользователями, генерация клиентских конфигов
-backend/    FastAPI + aiogram-бот, БД, платежный слой
+server/     скрипты для VPS: установка Marzban в Docker, автообновление из Git
+backend/    FastAPI + aiogram-бот, БД, платежный слой, клиент Marzban API
 webapp/     React Mini App (Telegram WebApp)
 ```
 
-## Клиенты (все платформы, официальные приложения sing-box)
+## Клиенты
 
 | Платформа | Приложение |
 |---|---|
-| Windows | sing-box GUI / Nekoray / v2rayN (sing-box core) |
-| Android | sing-box (SFA) / NekoBox |
-| iOS | sing-box (SFI) / Streisand |
+| Windows/macOS | Hiddify / Nekoray / v2rayN |
+| Android | v2rayNG / NekoBox |
+| iOS | Streisand / FoXray |
 
-Клиентский конфиг — JSON sing-box (полная маршрутизация) + `vless://` URI
-(для простого импорта). Для Android/iOS QR-код URI.
+Выдача конфига: QR-код или `vless://` ссылка + подписочная ссылка Marzban
+(подписка обновляет конфиг автоматически).
 
 ## Быстрый старт (VPS, Ubuntu 22.04+)
 
 ```bash
-# 1. на VPS
-sudo bash server/install.sh
-sudo python3 server/gen-server-conf.py init
-sudo systemctl enable --now sing-box
+# 1. Marzban: Docker, контейнер, sudo-админ, Reality-ключи
+sudo bash server/install.sh vpnadmin 'пароль'
+# → настроить инбаунд VLESS-REALITY на 443 (см. вывод скрипта и DEPLOY.md)
 
-# 2. создать клиента
-sudo bash server/users.sh add <uuid>            # UUID сгенерирует бэкенд
-python3 server/gen-client-conf.py <IP> 443 <uuid> <pubkey> <short_id> my-vpn out.json out.uri
-
-# 3. бэкенд и бот
+# 2. бэкенд и бот
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env   # заполнить BOT_TOKEN, ADMIN_IDS, SECRET
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-.venv/bin/python -m app.bot
+cp .env.example .env   # BOT_TOKEN, ADMIN_IDS, JWT_SECRET, MARZBAN_*, REALITY_*
+systemd юниты vpn-api (порт 8081) и vpn-bot — см. DEPLOY.md
 
-# 4. webapp: собрать и положить dist в backend/webapp/dist
-cd webapp && npm i && npm run build
+# 3. webapp: собрать dist в backend/webapp/dist
+cd webapp && npm ci && npm run build
 ```
 
-## Деплой Mini App без домена
+Подробный деплой: [DEPLOY.md](DEPLOY.md).
 
-WebApp в Telegram открывается только по HTTPS. Без домена — временно
-Cloudflare Tunnel / ngrok / bore; домен (~$3/год) — правильный путь,
-тогда FastAPI отдаёт webapp статикой на том же origin.
+## Mini App без домена
+
+WebApp в Telegram открывается только по HTTPS. Без домена — временный
+Cloudflare Tunnel к `127.0.0.1:8081` (адрес меняется при перезапуске);
+домен (~$3/год) — правильный путь: постоянный URL и HTTPS-подписки.
 
 ## Платежи
 
@@ -79,7 +71,7 @@ Cloudflare Tunnel / ngrok / bore; домен (~$3/год) — правильны
 
 ## Безопасность
 
-- Бэкенд и бот живут на VPS и работают через `sudo`-ограниченные команды
-  (`users.sh add/del`), без прямого доступа к конфигу сервера.
-- UUID пользователя генерируется бэкендом, в открытом виде нигде не хранится
-  кроме БД бэкенда.
+- Бот/API обращаются к Marzban по локальному REST (`MARZBAN_URL=http://127.0.0.1:8000`);
+  порт 8000 открыт ради подписок — для постоянного HTTPS нужен домен.
+- Секреты только в `backend/.env` на сервере; автообновление из Git не
+  перезаписывает его и останавливается при локальных изменениях.

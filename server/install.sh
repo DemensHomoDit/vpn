@@ -1,47 +1,63 @@
 #!/usr/bin/env bash
+# Установка Marzban (Xray + VLESS Reality) в Docker. Использование:
+#   sudo bash server/install.sh <marzban_admin> <admin_password>
 set -euo pipefail
 
-ARCH=$(uname -m)
-case "$ARCH" in
-  x86_64) BIN_ARCH=amd64 ;;
-  aarch64) BIN_ARCH=arm64 ;;
-  *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
-esac
+ADMIN_USER="${1:?usage: install.sh <admin_user> <admin_password>}"
+ADMIN_PASS="${2:?usage: install.sh <admin_user> <admin_password>}"
+MARZBAN_DIR=/opt/marzban
 
 apt-get update
-apt-get install -y curl jq
+apt-get install -y ca-certificates curl git ufw
 
-LATEST=$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
-URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST}/sing-box-${LATEST#v}-linux-${BIN_ARCH}.tar.gz"
-echo "Downloading sing-box ${LATEST}..."
-curl -fsSL -o /tmp/sing-box.tar.gz "$URL"
-mkdir -p /tmp/sing-box-extract
-tar -xzf /tmp/sing-box.tar.gz -C /tmp/sing-box-extract
-install -m 755 /tmp/sing-box-extract/sing-box-*/sing-box /usr/local/bin/sing-box
-rm -rf /tmp/sing-box.tar.gz /tmp/sing-box-extract
+if ! command -v docker >/dev/null; then
+  curl -fsSL https://get.docker.com | sh
+fi
+docker compose version >/dev/null 2>&1 || {
+  echo "docker compose plugin missing" >&2
+  exit 1
+}
 
-mkdir -p /etc/sing-box
-if [ ! -f /etc/systemd/system/sing-box.service ]; then
-  cat > /etc/systemd/system/sing-box.service <<EOF
-[Unit]
-Description=sing-box proxy server
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+mkdir -p "$MARZBAN_DIR"
+cd "$MARZBAN_DIR"
+if [ ! -f docker-compose.yml ]; then
+cat > docker-compose.yml <<'EOF'
+services:
+  marzban:
+    image: gozargah/marzban:latest
+    restart: always
+    env_file: .env
+    network_mode: host
+    volumes:
+      - /var/lib/marzban:/var/lib/marzban
 EOF
 fi
 
-sysctl -w net.ipv4.ip_forward=1
-grep -q "net.ipv4.ip_forward" /etc/sysctl.conf || echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
-
 ufw allow 22/tcp
 ufw allow 443/tcp
+ufw allow 8000/tcp   # подписки/панель Marzban (HTTP)
 ufw --force enable
 
-echo "OK: sing-box ${LATEST} installed. Next: sudo python3 gen-server-conf.py"
-sing-box version
+docker compose pull
+docker compose up -d
+sleep 10
+
+# sudo-администратор панели (повторный запуск просто сообщит, что существует)
+docker compose exec -T marzban marzban cli admin create-sudo-admin \
+  --username "$ADMIN_USER" --password "$ADMIN_PASS" || true
+
+# Reality-ключи
+if [ ! -f /root/marzban-x25519.txt ]; then
+  KEYS=$(docker compose exec -T marzban marzban core-x25519 2>/dev/null \
+    || docker compose exec -T marzban xray x25519)
+  echo "$KEYS" > /root/marzban-x25519.txt
+fi
+cat /root/marzban-x25519.txt
+
+echo
+echo "Готово. Дальше:"
+echo "1. Отредактируйте /var/lib/marzban/xray_config.json: инбаунд VLESS на 443,"
+echo "   security=reality, dest/sni=dl.google.com:443, fingerprint chrome,"
+echo "   flow xtls-rprx-vision, shortIds из /root/marzban-x25519.txt."
+echo "2. docker compose restart и проверьте: curl http://127.0.0.1:8000/api/system"
+echo "3. Значения PBK/SID впишите в /root/vpn/backend/.env (REALITY_PBK, REALITY_SID)."
