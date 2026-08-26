@@ -19,10 +19,17 @@ def _parse_init_data(init_data: str) -> dict:
 
 def _check_signature(data: dict, bot_token: str) -> bool:
     received = data.pop("hash", "")
-    items = "".join(f"{k}={v}\n" for k, v in sorted(data.items())).rstrip("\n")
+    if _hmac_hex(data.items(), bot_token) == received:
+        return True
+    # часть клиентов не включает поле signature в data-check-string
+    without_sig = {k: v for k, v in data.items() if k != "signature"}
+    return _hmac_hex(without_sig.items(), bot_token) == received
+
+
+def _hmac_hex(items, bot_token: str) -> str:
+    check_string = "".join(f"{k}={v}\n" for k, v in sorted(items)).rstrip("\n")
     secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    expected = hmac.new(secret, items.encode(), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(received, expected)
+    return hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
 
 
 def validate_init_data(init_data: str) -> dict | None:
