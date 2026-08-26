@@ -17,7 +17,5 @@ fi
 git merge --ff-only '@{u}'
 backend/.venv/bin/pip install --disable-pip-version-check -r backend/requirements.txt
 ( cd webapp && npm ci && npm run build )
-install -d backend/webapp/dist
-cp -a webapp/dist/. backend/webapp/dist/
 systemctl restart vpn-api.service vpn-bot.service
 echo "Updated to $(git rev-parse --short HEAD)"

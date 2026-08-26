@@ -11,6 +11,7 @@ from .payments import PLANS, get_provider
 from .webapp_auth import create_token, decode_token, validate_init_data
 
 app = FastAPI(title="VPN backend")
+WEBAPP_DIST = Path(__file__).parent.parent / "webapp" / "dist"
 
 
 def _auth(request: Request) -> dict:
@@ -155,12 +156,11 @@ INSTRUCTIONS = (
 
 @app.get("/")
 async def index():
-    dist = Path(__file__).parent / "webapp" / "dist"
-    if (dist / "index.html").exists():
-        return FileResponse(dist / "index.html")
+    if (WEBAPP_DIST / "index.html").exists():
+        return FileResponse(WEBAPP_DIST / "index.html")
     return JSONResponse({"ok": True, "webapp": "not built"})
 
 
-if (Path(__file__).parent / "webapp" / "dist").exists():
-    app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "webapp" / "dist" / "assets"), name="assets")
-    app.mount("/webapp", StaticFiles(directory=Path(__file__).parent / "webapp" / "dist", html=True), name="webapp")
+if WEBAPP_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=WEBAPP_DIST / "assets"), name="assets")
+    app.mount("/webapp", StaticFiles(directory=WEBAPP_DIST, html=True), name="webapp")
