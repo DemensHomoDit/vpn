@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for VPN application updates every six hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:17:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

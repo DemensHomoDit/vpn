@@ -8,7 +8,7 @@ CONF = "/etc/sing-box/config.json"
 USERS_FILE = "/etc/sing-box/users.json"
 META_FILE = "/etc/sing-box/meta.json"
 PORT = 443
-FALLBACK_HOST = "www.microsoft.com"
+FALLBACK_HOST = "dl.google.com"
 SHORT_ID_LEN = 8
 
 

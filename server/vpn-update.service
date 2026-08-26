@@ -1,0 +1,9 @@
+[Unit]
+Description=Update VPN application from Git
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/vpn
+ExecStart=/root/vpn/server/update.sh

@@ -5,7 +5,7 @@ import sys
 RU_DOMAINS_SRS = "https://raw.githubusercontent.com/itdoginfo/allow-domains/master/src/domains/Russia-domains-lumped.srs"
 RU_IPS_SRS = "https://raw.githubusercontent.com/itdoginfo/allow-domains/master/src/domains/Russia-ips-lumped.srs"
 GEOSITE_RU_SRS = "https://raw.githubusercontent.com/itdoginfo/allow-domains/master/src/domains/geosite-ru.srs"
-FALLBACK_HOST = "www.microsoft.com"
+FALLBACK_HOST = "dl.google.com"
 FINGERPRINT = "chrome"
 UPDATE_INTERVAL = "1d"
 

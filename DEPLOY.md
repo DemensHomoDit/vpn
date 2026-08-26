@@ -103,7 +103,26 @@ cloudflared tunnel --url http://localhost:8000
 Затем в @BotFather: Bot Settings → Menu Button → URL webapp.
 `WEBAPP_URL` в `.env` → кнопка «Открыть Mini App» в боте.
 
-## 5. Эксплуатация
+## 5. Автоматическое обновление из Git
+
+После первого запуска бэкенда установите таймер. `backend/.env` должен
+оставаться только на сервере и не добавляться в репозиторий.
+
+```bash
+cd /root/vpn
+sudo install -m 755 server/update.sh /root/vpn/server/update.sh
+sudo install -m 644 server/vpn-update.service /etc/systemd/system/vpn-update.service
+sudo install -m 644 server/vpn-update.timer /etc/systemd/system/vpn-update.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now vpn-update.timer
+sudo systemctl start vpn-update.service
+```
+
+Таймер проверяет обновления каждые шесть часов. Он откажется обновлять
+сервер, если в рабочей копии есть локальные изменения, поэтому секреты и
+настройки держите в `.env`.
+
+## 6. Эксплуатация
 
 - `/stats` — статистика (бот, админ)
 - `/extend <tg_id> <дней>` — продлить
