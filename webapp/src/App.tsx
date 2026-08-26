@@ -18,14 +18,19 @@ export default function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const initData = WebApp.initData;
+    if (!initData) {
+      setError("Откройте приложение через кнопку «📱 Личный кабинет» в боте.");
+      return;
+    }
     api
-      .auth(WebApp.initData)
+      .auth(initData)
       .then((d) => {
         setAdmin(d.admin);
         return api.me();
       })
       .then(setMe)
-      .catch((e) => setError(String(e)));
+      .catch(() => setError("Не удалось авторизоваться. Закройте приложение и откройте его заново из бота."));
   }, []);
 
   const go = (v: View) => {

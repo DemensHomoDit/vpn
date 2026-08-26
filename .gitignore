@@ -13,3 +13,7 @@ private/
 data/
 .ssh_*.py
 .probe_*.sh
+.deploy*.sh
+.diag_*.sh
+.fix_*.sh
+.verify*.sh

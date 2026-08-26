@@ -1,12 +1,15 @@
 import hashlib
 import hmac
 import json
+import logging
 import time
 import urllib.parse
 
 import jwt
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_init_data(init_data: str) -> dict:
@@ -24,7 +27,12 @@ def _check_signature(data: dict, bot_token: str) -> bool:
 
 def validate_init_data(init_data: str) -> dict | None:
     data = _parse_init_data(init_data)
-    if not data or not _check_signature(data, settings.bot_token):
+    if not data:
+        return None
+    if not _check_signature(data, settings.bot_token):
+        # логируем только имена полей, без значений — по ним видно,
+        # шлёт ли клиент то, что мы ожидаем (hash/user/auth_date/…)
+        logger.warning("initData signature mismatch; fields=%s", ",".join(sorted(data.keys() - {"user"})))
         return None
     user = json.loads(data.get("user", "{}"))
     return {"tg_id": user.get("id"), "name": user.get("first_name", ""), "username": user.get("username")}
