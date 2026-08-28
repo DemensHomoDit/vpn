@@ -4,10 +4,22 @@ import WebApp from "@twa-dev/sdk";
 import App from "./App";
 import "./styles.css";
 
+const applyTheme = () => {
+  const scheme = WebApp.colorScheme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = scheme;
+  const bg = scheme === "light" ? "#f2f2f7" : "#000000";
+  try {
+    WebApp.setHeaderColor(bg);
+    WebApp.setBackgroundColor(bg);
+  } catch {
+    /* не все клиенты поддерживают */
+  }
+};
+
 WebApp.ready();
 WebApp.expand();
-WebApp.setHeaderColor("#0b1020");
-WebApp.setBackgroundColor("#0b1020");
+applyTheme();
+WebApp.onEvent("themeChanged", applyTheme);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
