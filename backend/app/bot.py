@@ -27,11 +27,13 @@ router = Router()
 dp.include_router(router)
 
 APPS_TEXT = (
-    "<b>Приложения для подключения</b>\n"
-    "🤖 Android: <b>v2rayNG</b> или NekoBox\n"
-    "🍏 iPhone: <b>Streisand</b> или FoXray\n"
-    "💻 Windows/macOS: <b>Hiddify</b>, Nekoray или v2rayN\n\n"
-    "В приложении выберите «Импорт из буфера обмена» или отсканируйте QR."
+    "<b>Приложение для подключения — Happ</b>\n"
+    "🤖 Android: <b>Happ</b> — github.com/Happ-proxy/happ-android/releases\n"
+    "🍏 iPhone: <b>Happ</b> — App Store: «Happ — Proxy Utility»\n"
+    "💻 Windows/macOS: <b>Happ</b> — github.com/Happ-proxy/happ-desktop/releases\n\n"
+    "Импорт в Happ: кнопка «+» → вставить ссылку или сканировать QR.\n"
+    "Подписочная ссылка обновляет конфиг автоматически.\n\n"
+    "Также подойдут: v2rayNG (Android), Streisand (iOS), Nekoray/v2rayN."
 )
 
 
@@ -226,7 +228,7 @@ async def cb_cfg(callback: CallbackQuery):
 async def cb_cfg_qr(callback: CallbackQuery):
     user = db.get_user(callback.from_user.id)
     uri, _ = await ensure_config(user)
-    await callback.message.answer_photo(qr_bytes(uri), caption="📷 Отсканируйте QR: v2rayNG ▸ «+» ▸ Scan QR.")
+    await callback.message.answer_photo(qr_bytes(uri), caption="📷 Отсканируйте QR в Happ: «+» → сканировать QR-код.")
     await callback.answer()
 
 
@@ -249,10 +251,11 @@ async def cb_cfg_sub(callback: CallbackQuery):
         await callback.answer("Подписочные ссылки временно недоступны", show_alert=True)
         return
     await callback.message.answer(
-        "📥 Добавьте эту ссылку как подписку в приложении "
-        "(v2rayNG ▸ Subscriptions ▸ «+»; Streisand ▸ «+» ▸ Add subscription):\n\n"
+        "📥 Добавьте эту ссылку как подписку в Happ "
+        "(«+» → «Вставить из буфера» / Add subscription):\n\n"
         f"<code>{sub}</code>\n\n"
-        "Подписка автоматически содержит актуальный конфиг и обновляется.",
+        "Подписка автоматически содержит актуальный конфиг и обновляется. "
+        "Старые конфиги (если добавляли раньше) удалите — они недействительны.",
     )
     await callback.answer()
 
@@ -273,12 +276,13 @@ async def cb_cfg_regen(callback: CallbackQuery):
 @router.callback_query(F.data == "help")
 async def cb_help(callback: CallbackQuery):
     await callback.message.answer(
-        "<b>📚 Как подключиться</b>\n\n"
-        "1️⃣ Установите приложение (список ниже)\n"
-        "2️⃣ «Мой конфиг» → QR или скопируйте vless://\n"
-        "3️⃣ Включите VPN в приложении\n\n" + APPS_TEXT +
+        "<b>📚 Как подключиться (Happ)</b>\n\n"
+        "1️⃣ Установите Happ (ссылки ниже)\n"
+        "2️⃣ «⚡ Подключить» → QR или скопируйте vless://\n"
+        "3️⃣ В Happ: «+» → сканировать QR / вставить ссылку\n"
+        "4️⃣ Выберите конфиг и включите тумблер\n\n" + APPS_TEXT +
         "\n\n🇷🇺 Российские сайты работают напрямую, остальное — через VPN. "
-        "Обход блокировок обеспечивается протоколом VLESS + Reality."
+        "Протокол VLESS + Reality имитирует обычный HTTPS к dl.google.com."
     )
     await callback.answer()
 

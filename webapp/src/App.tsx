@@ -131,9 +131,9 @@ function Config({ me }: { me: any }) {
         )}
         <button className="btn ghost" onClick={regen}>Перевыпустить</button>
         <p className="muted small">
-          Android (v2rayNG): Scan QR-code или Import from clipboard.<br />
-          iPhone (Streisand): «+» → Add config → Scan.<br />
-          Подписка: добавить ссылку в Subscriptions — конфиг обновляется сам.
+          Happ (Android/iOS/Windows): «+» → вставить ссылку или сканировать QR.<br />
+          Подписка: добавить ссылку в подписки — конфиг обновляется сам.<br />
+          Старые конфиги, добавленные раньше, удалите — они недействительны.
         </p>
       </div>
     </div>

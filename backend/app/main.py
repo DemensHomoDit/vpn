@@ -14,14 +14,16 @@ app = FastAPI(title="VPN backend")
 WEBAPP_DIST = Path(__file__).parent.parent / "webapp" / "dist"
 
 INSTRUCTIONS = (
-    "1. Установите приложение для подключения.\n"
+    "1. Установите Happ — рекомендуемое приложение.\n"
+    "   Android: github.com/Happ-proxy/happ-android/releases\n"
+    "   iPhone: App Store — «Happ — Proxy Utility»\n"
+    "   Windows/macOS: github.com/Happ-proxy/happ-desktop/releases\n"
     "2. Во вкладке «Конфиг» отсканируйте QR или скопируйте ссылку vless://.\n"
-    "3. В приложении: «+» → Import from clipboard / Scan QR-code.\n"
-    "4. Включите VPN-режим.\n\n"
-    "Приложения:\n"
-    "Android: v2rayNG, NekoBox\n"
-    "iPhone: Streisand, FoXray\n"
-    "Windows/macOS: Hiddify, Nekoray, v2rayN\n\n"
+    "3. В Happ: «+» → вставить ссылку / сканировать QR.\n"
+    "4. Включите тумблер VPN в Happ.\n\n"
+    "Лучше добавить подписочную ссылку (вкладка «Конфиг» → «Скопировать подписку»):\n"
+    "конфиг будет обновляться сам.\n\n"
+    "Также подходят: v2rayNG (Android), Streisand (iOS), Nekoray, v2rayN.\n"
     "Российские сайты идут напрямую (ваш IP), остальные — через VPN.\n"
     "Протокол VLESS + Reality имитирует обычный HTTPS-трафик к dl.google.com."
 )
